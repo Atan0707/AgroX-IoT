@@ -167,45 +167,6 @@ async def control_system(control: SystemControl):
         message=message
     )
 
-# Keep the individual endpoints for backward compatibility
-@app.post("/api/control/sensor/{state}", response_model=StatusResponse)
-async def control_sensor(state: str):
-    global sensor_active
-    
-    if state.lower() == "start":
-        sensor_active = True
-        message = "Sensor data collection started"
-    elif state.lower() == "stop":
-        sensor_active = False
-        message = "Sensor data collection stopped"
-    else:
-        raise HTTPException(status_code=400, detail="Invalid state. Use 'start' or 'stop'")
-    
-    return StatusResponse(
-        sensor_active=sensor_active,
-        camera_active=camera_active,
-        message=message
-    )
-
-@app.post("/api/control/camera/{state}", response_model=StatusResponse)
-async def control_camera(state: str):
-    global camera_active
-    
-    if state.lower() == "start":
-        camera_active = True
-        message = "Camera capture started"
-    elif state.lower() == "stop":
-        camera_active = False
-        message = "Camera capture stopped"
-    else:
-        raise HTTPException(status_code=400, detail="Invalid state. Use 'start' or 'stop'")
-    
-    return StatusResponse(
-        sensor_active=sensor_active,
-        camera_active=camera_active,
-        message=message
-    )
-
 # This function will be imported by dht22_with_camera.py
 def update_sensor_data(temp_c: float, temp_f: float, humidity: float):
     global latest_sensor_data

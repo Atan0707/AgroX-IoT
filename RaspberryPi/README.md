@@ -51,10 +51,6 @@ python3 start_system.py
 ### Control Endpoints
 - `GET /api/control/status` - Check the current status of sensor and camera
 - `POST /api/control` - Unified endpoint to control both sensor and camera (JSON body)
-- `POST /api/control/sensor/start` - Start sensor data collection
-- `POST /api/control/sensor/stop` - Stop sensor data collection
-- `POST /api/control/camera/start` - Start camera capture
-- `POST /api/control/camera/stop` - Stop camera capture
 
 ### Log Endpoints
 - `GET /api/logs/list` - List all available log files
@@ -86,13 +82,85 @@ curl -X POST http://raspberry-pi-ip:8000/api/control \
   -d '{"sensor": false}'
 ```
 
-#### Individual control endpoints (alternative):
+#### Stop Everything with curl:
 ```bash
-# Stop sensor data collection
-curl -X POST http://raspberry-pi-ip:8000/api/control/sensor/stop
+# Stop both sensor and camera completely
+curl -X POST http://raspberry-pi-ip:8000/api/control \
+  -H "Content-Type: application/json" \
+  -d '{"sensor": false, "camera": false}'
+```
 
-# Start camera capture
-curl -X POST http://raspberry-pi-ip:8000/api/control/camera/start
+#### JavaScript Examples for API Usage
+
+```javascript
+// Get sensor data
+async function getSensorData() {
+  try {
+    const response = await fetch('http://raspberry-pi-ip:8000/api/sensor');
+    const data = await response.json();
+    console.log('Sensor Data:', data);
+    return data;
+  } catch (error) {
+    console.error('Error getting sensor data:', error);
+  }
+}
+
+// Control sensor and camera
+async function controlSystem(sensorActive, cameraActive) {
+  try {
+    // Create control object - only include properties that need to be changed
+    const controlData = {};
+    if (sensorActive !== undefined) controlData.sensor = sensorActive;
+    if (cameraActive !== undefined) controlData.camera = cameraActive;
+    
+    const response = await fetch('http://raspberry-pi-ip:8000/api/control', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(controlData)
+    });
+    
+    const result = await response.json();
+    console.log('Control result:', result);
+    return result;
+  } catch (error) {
+    console.error('Error controlling system:', error);
+  }
+}
+
+// Examples:
+// Start both sensor and camera
+controlSystem(true, true);
+
+// Stop sensor only (leave camera unchanged)
+controlSystem(false);
+
+// Stop camera only (leave sensor unchanged)
+controlSystem(undefined, false);
+
+// Get the latest image URL
+function getLatestImageUrl() {
+  return 'http://raspberry-pi-ip:8000/api/images/latest';
+}
+
+// Display the latest image in an <img> element
+function displayLatestImage() {
+  document.getElementById('sensorImage').src = getLatestImageUrl() + '?t=' + new Date().getTime();
+}
+
+// Get today's log file
+async function getTodayLog() {
+  try {
+    const response = await fetch('http://raspberry-pi-ip:8000/api/logs/today');
+    const csvText = await response.text();
+    console.log('Today\'s log:', csvText);
+    // Process CSV data as needed
+    return csvText;
+  } catch (error) {
+    console.error('Error getting log:', error);
+  }
+}
 ```
 
 #### Download today's log file:
