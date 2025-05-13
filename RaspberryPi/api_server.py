@@ -170,13 +170,13 @@ async def control_system(control: SystemControl):
 # This function will be imported by dht22_with_camera.py
 def update_sensor_data(temp_c: float, temp_f: float, humidity: float):
     global latest_sensor_data
-    if sensor_active:
-        latest_sensor_data = {
-            "temperature_c": temp_c,
-            "temperature_f": temp_f,
-            "humidity": humidity,
-            "timestamp": time.time()
-        }
+    # The sensor_active check is now handled in dht22_with_camera.py
+    latest_sensor_data = {
+        "temperature_c": temp_c,
+        "temperature_f": temp_f,
+        "humidity": humidity,
+        "timestamp": time.time()
+    }
 
 # Function to check if camera is active
 def is_camera_active():

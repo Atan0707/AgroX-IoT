@@ -85,7 +85,7 @@ curl -X POST http://raspberry-pi-ip:8000/api/control \
 #### Stop Everything with curl:
 ```bash
 # Stop both sensor and camera completely
-curl -X POST http://raspberry-pi-ip:8000/api/control \
+curl -X POST http://localhost:8000/api/control \
   -H "Content-Type: application/json" \
   -d '{"sensor": false, "camera": false}'
 ```
@@ -195,8 +195,8 @@ The script automatically creates the "images" and "logs" directories if they don
 
 ### Basic Setup
 ```bash
-python -m venv --system-site-packages env
-source env/bin/activate
+python -m venv --system-site-packages venv
+source venv/bin/activate
 ```
 
 ### Manual Package Installation
