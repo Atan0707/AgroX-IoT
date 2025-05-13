@@ -36,3 +36,11 @@ image_YYYYMMDD_HHMMSS.jpg
 ```
 
 The script automatically creates the "images" directory if it doesn't exist. 
+
+## Things need to be installed
+
+```bash
+python -m venv --system-site-packages env
+python3 -m pip install RPi.GPIO
+python3 -m pip install adafruit-circuitpython-dht
+```
