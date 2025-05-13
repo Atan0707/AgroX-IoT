@@ -4,6 +4,7 @@ import adafruit_dht
 import os
 from datetime import datetime
 from picamera2 import Picamera2
+import api_server  # Import the API server module
 
 # Create directory for storing images if it doesn't exist
 IMAGE_DIR = "images"
@@ -35,6 +36,9 @@ while True:
         humidity = sensor.humidity
         print("Temp={0:0.1f}ºC, Temp={1:0.1f}ºF, Humidity={2:0.1f}%".format(
             temperature_c, temperature_f, humidity))
+        
+        # Update API server with latest sensor data
+        api_server.update_sensor_data(temperature_c, temperature_f, humidity)
         
         # Check if it's time to capture an image
         if current_time - last_capture_time >= CAPTURE_INTERVAL:

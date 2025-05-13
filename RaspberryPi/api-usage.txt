@@ -1,0 +1,142 @@
+# AgroX-IoT Raspberry Pi API
+
+This API provides access to DHT22 sensor data (temperature and humidity) and images captured by the Raspberry Pi camera.
+
+## Installation
+
+1. Make sure you have the required dependencies:
+
+```bash
+pip install fastapi uvicorn pydantic
+```
+
+2. You already have the required sensor and camera libraries installed for the monitoring script.
+
+## Starting the System
+
+To start both the API server and sensor monitoring:
+
+```bash
+python start_system.py
+```
+
+This will:
+- Start the FastAPI server on port 8000
+- Start the DHT22 and camera monitoring
+- Display the available API endpoints
+
+## API Endpoints
+
+### Root Endpoint
+
+```
+GET /
+```
+
+Returns a simple message indicating the API is running.
+
+### Sensor Data
+
+```
+GET /api/sensor
+```
+
+Returns the latest sensor data in JSON format:
+
+```json
+{
+  "temperature_c": 25.5,
+  "temperature_f": 77.9,
+  "humidity": 45.2,
+  "timestamp": 1629456789.123
+}
+```
+
+### Images
+
+#### Get Latest Image
+
+```
+GET /api/images/latest
+```
+
+Returns the most recently captured image file.
+
+#### List All Images
+
+```
+GET /api/images/list
+```
+
+Returns a list of all available image filenames:
+
+```json
+{
+  "images": [
+    "image_20230815_120000.jpg",
+    "image_20230815_120100.jpg",
+    "image_20230815_120200.jpg"
+  ]
+}
+```
+
+#### Get Specific Image
+
+```
+GET /api/images/{image_name}
+```
+
+Returns a specific image by its filename.
+
+Example: `/api/images/image_20230815_120000.jpg`
+
+## Testing the API
+
+You can use a web browser or tools like curl to test the API:
+
+```bash
+# Get sensor data
+curl http://localhost:8000/api/sensor
+
+# List images
+curl http://localhost:8000/api/images/list
+
+# Save the latest image to a file
+curl http://localhost:8000/api/images/latest --output latest_image.jpg
+```
+
+## Client Usage Examples
+
+### JavaScript Example
+
+```javascript
+// Fetch latest sensor data
+fetch('http://raspberry-pi-ip:8000/api/sensor')
+  .then(response => response.json())
+  .then(data => {
+    console.log(`Temperature: ${data.temperature_c}°C`);
+    console.log(`Humidity: ${data.humidity}%`);
+  });
+
+// Display latest image
+const img = document.createElement('img');
+img.src = 'http://raspberry-pi-ip:8000/api/images/latest';
+document.body.appendChild(img);
+```
+
+### Python Example
+
+```python
+import requests
+
+# Get sensor data
+response = requests.get('http://raspberry-pi-ip:8000/api/sensor')
+data = response.json()
+print(f"Temperature: {data['temperature_c']}°C")
+print(f"Humidity: {data['humidity']}%")
+
+# Get and save latest image
+image_response = requests.get('http://raspberry-pi-ip:8000/api/images/latest')
+with open('latest_image.jpg', 'wb') as f:
+    f.write(image_response.content)
+``` 
