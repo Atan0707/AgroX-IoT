@@ -5,13 +5,14 @@ import os
 import threading
 
 def log_output(process, prefix):
-    """Read and print output from the process with a prefix."""
+    """Read output from the process but don't print to console.
+    This allows processes to run without cluttering the terminal with logs."""
     for line in iter(process.stdout.readline, ''):
-        if line:
-            print(f"{prefix}: {line.strip()}")
+        pass  # Just consume the output without printing
     
     for line in iter(process.stderr.readline, ''):
-        if line:
+        # Only print critical errors
+        if "CRITICAL" in line or "ERROR" in line:
             print(f"{prefix} ERROR: {line.strip()}")
 
 def start_api_server():
@@ -77,15 +78,13 @@ def main():
     print("  - GET /api/control/status - Check sensor and camera status")
     print("  - POST /api/control - Unified endpoint to control both sensor and camera")
     print("    Example: {'sensor': true, 'camera': false}")
-    print("  - POST /api/control/sensor/start - Start sensor data collection")
-    print("  - POST /api/control/sensor/stop - Stop sensor data collection")
-    print("  - POST /api/control/camera/start - Start camera capture")
-    print("  - POST /api/control/camera/stop - Stop camera capture")
     print("\n  LOG ENDPOINTS:")
     print("  - GET /api/logs/list - List all available log files")
     print("  - GET /api/logs/today - Get today's sensor log file (CSV)")
     print("  - GET /api/logs/{log_name} - Get a specific log file by name")
-    print("\n===== Live logs displayed below =====\n")
+    print("\n===== System running in background =====")
+    print("- Logs are being saved to files")
+    print("- Use Control+C to stop the system")
     
     try:
         # Keep the script running and monitor the subprocesses
