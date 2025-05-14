@@ -23,5 +23,5 @@ while True:
     except Exception as error:
         sensor.exit()
         raise error
-
+ 
     time.sleep(3.0)
