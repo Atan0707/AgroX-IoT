@@ -7,6 +7,7 @@ import signal
 import sys
 import glob
 import threading
+import RPi.GPIO as GPIO
 from datetime import datetime
 from picamera2 import Picamera2
 from flask import Flask, jsonify, request, send_file
@@ -14,6 +15,20 @@ from flask import Flask, jsonify, request, send_file
 # Create directories for storing images and logs if they don't exist
 IMAGE_DIR = "images"
 LOG_DIR = "logs"
+
+# GPIO setup for LEDs
+CAMERA_PIN = 17
+RED_LED_PIN = 27    # LED to indicate system is OFF
+GREEN_LED_PIN = 22  # LED to indicate system is ON
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(CAMERA_PIN, GPIO.OUT)
+GPIO.setup(RED_LED_PIN, GPIO.OUT)
+GPIO.setup(GREEN_LED_PIN, GPIO.OUT)
+
+GPIO.output(CAMERA_PIN, GPIO.LOW)
+GPIO.output(RED_LED_PIN, GPIO.HIGH)  # System starts OFF, so turn on red LED
+GPIO.output(GREEN_LED_PIN, GPIO.LOW)
 
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
@@ -79,6 +94,27 @@ def update_sensor_data(temp_c, temp_f, humidity):
             "timestamp": time.time()
         }
 
+# Function to update status LEDs
+def update_status_leds(is_on=False):
+    """Update status LEDs based on system state"""
+    if is_on:
+        GPIO.output(GREEN_LED_PIN, GPIO.HIGH)
+        GPIO.output(RED_LED_PIN, GPIO.LOW)
+        log_message("Status LEDs: GREEN ON (System active)")
+    else:
+        GPIO.output(GREEN_LED_PIN, GPIO.LOW)
+        GPIO.output(RED_LED_PIN, GPIO.HIGH)
+        log_message("Status LEDs: RED ON (System inactive)")
+
+# Function to blink LED
+def blink_led(count=3, delay=0.2):
+    """Blink LED the specified number of times with the given delay."""
+    for _ in range(count):
+        GPIO.output(CAMERA_PIN, GPIO.HIGH)
+        time.sleep(delay)
+        GPIO.output(CAMERA_PIN, GPIO.LOW)
+        time.sleep(delay)
+
 # Function to clean up resources
 def cleanup_resources():
     try:
@@ -91,6 +127,8 @@ def cleanup_resources():
             picam2.close()
     except:
         pass
+    # Clean up GPIO
+    GPIO.cleanup()
     log_message("Resources cleaned up")
 
 # Setup signal handler for graceful shutdown
@@ -121,6 +159,9 @@ def turn_on_system():
     sensor_active = True
     camera_active = True
     
+    # Update status LEDs
+    update_status_leds(True)
+    
     log_message(f"New state: Sensor={sensor_active}, Camera={camera_active}")
     return jsonify({
         "sensor_active": sensor_active,
@@ -138,6 +179,9 @@ def turn_off_system():
     
     sensor_active = False
     camera_active = False
+    
+    # Update status LEDs
+    update_status_leds(False)
     
     log_message(f"New state: Sensor={sensor_active}, Camera={camera_active}")
     return jsonify({
@@ -236,6 +280,7 @@ def control_system():
     # Track what was changed for the response message
     changes = []
     state_changed = False
+    prev_both_active = sensor_active and camera_active
     
     # Update sensor status if provided
     if "sensor" in control and control["sensor"] != sensor_active:
@@ -261,6 +306,19 @@ def control_system():
         message = "No changes made. Specify 'sensor' and/or 'camera' with boolean values."
     else:
         message = ". ".join(changes)
+    
+    # Update LEDs based on current state
+    both_active_now = sensor_active and camera_active
+    both_inactive_now = not sensor_active and not camera_active
+    
+    if both_active_now:
+        update_status_leds(True)
+    elif both_inactive_now:
+        update_status_leds(False)
+    else:
+        # Partial state - blink both LEDs to indicate mixed state
+        GPIO.output(GREEN_LED_PIN, GPIO.HIGH if sensor_active else GPIO.LOW)
+        GPIO.output(RED_LED_PIN, GPIO.HIGH if camera_active else GPIO.LOW)
     
     log_message(f"Current state: Sensor={sensor_active}, Camera={camera_active}")
     return jsonify({
@@ -358,6 +416,9 @@ def sensor_monitoring_loop():
                     
                     # Double-check camera is still active
                     if camera_active:
+                        # Blink LED to indicate picture is being taken
+                        blink_led()
+                        
                         # Capture image
                         picam2.capture_file(image_path)
                         log_message(f"Image captured: {image_path}")
@@ -383,6 +444,9 @@ def sensor_monitoring_loop():
 def main():
     """Main function to start both the API server and sensor monitoring."""
     log_message("Starting AgroX-IoT All-in-One System...")
+    
+    # Initial LED state - start with system off
+    update_status_leds(False)
     
     # Start sensor monitoring thread
     sensor_thread = threading.Thread(target=sensor_monitoring_loop, daemon=True)
