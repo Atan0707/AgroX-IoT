@@ -33,8 +33,11 @@ latest_sensor_data = {
 }
 
 # Control flags
-sensor_active = True
-camera_active = True
+sensor_active = False
+camera_active = False
+
+# Add state change tracking for debugging
+state_change_count = 0
 
 # Model for sensor data response
 class SensorData(BaseModel):
@@ -58,6 +61,42 @@ class SystemControl(BaseModel):
 @app.get("/")
 async def root():
     return {"message": "RaspberryPi Sensor API is running"}
+
+@app.get("/api/control/on", response_model=StatusResponse)
+async def turn_on_system():
+    global sensor_active, camera_active, state_change_count
+    
+    state_change_count += 1
+    print(f"STATE CHANGE #{state_change_count}: Turning ON all systems")
+    print(f"Previous state: Sensor={sensor_active}, Camera={camera_active}")
+    
+    sensor_active = True
+    camera_active = True
+    
+    print(f"New state: Sensor={sensor_active}, Camera={camera_active}")
+    return StatusResponse(
+        sensor_active=sensor_active,
+        camera_active=camera_active,
+        message="All systems turned on"
+    )
+
+@app.get("/api/control/off", response_model=StatusResponse)
+async def turn_off_system():
+    global sensor_active, camera_active, state_change_count
+    
+    state_change_count += 1
+    print(f"STATE CHANGE #{state_change_count}: Turning OFF all systems")
+    print(f"Previous state: Sensor={sensor_active}, Camera={camera_active}")
+    
+    sensor_active = False
+    camera_active = False
+    
+    print(f"New state: Sensor={sensor_active}, Camera={camera_active}")
+    return StatusResponse(
+        sensor_active=sensor_active,
+        camera_active=camera_active,
+        message="All systems turned off"
+    )
 
 @app.get("/api/sensor", response_model=SensorData)
 async def get_sensor_data():
@@ -138,19 +177,27 @@ async def get_status():
 # Unified control endpoint
 @app.post("/api/control", response_model=StatusResponse)
 async def control_system(control: SystemControl):
-    global sensor_active, camera_active
+    global sensor_active, camera_active, state_change_count
     
     # Track what was changed for the response message
     changes = []
+    state_changed = False
     
     # Update sensor status if provided
-    if control.sensor is not None:
+    if control.sensor is not None and control.sensor != sensor_active:
+        state_change_count += 1
+        state_changed = True
+        print(f"STATE CHANGE #{state_change_count}: Sensor {sensor_active} -> {control.sensor}")
         sensor_active = control.sensor
         status = "started" if control.sensor else "stopped"
         changes.append(f"Sensor data collection {status}")
     
     # Update camera status if provided
-    if control.camera is not None:
+    if control.camera is not None and control.camera != camera_active:
+        if not state_changed:
+            state_change_count += 1
+        state_changed = True
+        print(f"STATE CHANGE #{state_change_count}: Camera {camera_active} -> {control.camera}")
         camera_active = control.camera
         status = "started" if control.camera else "stopped"
         changes.append(f"Camera capture {status}")
@@ -161,6 +208,7 @@ async def control_system(control: SystemControl):
     else:
         message = ". ".join(changes)
     
+    print(f"Current state: Sensor={sensor_active}, Camera={camera_active}")
     return StatusResponse(
         sensor_active=sensor_active,
         camera_active=camera_active,
@@ -170,13 +218,14 @@ async def control_system(control: SystemControl):
 # This function will be imported by dht22_with_camera.py
 def update_sensor_data(temp_c: float, temp_f: float, humidity: float):
     global latest_sensor_data
-    # The sensor_active check is now handled in dht22_with_camera.py
-    latest_sensor_data = {
-        "temperature_c": temp_c,
-        "temperature_f": temp_f,
-        "humidity": humidity,
-        "timestamp": time.time()
-    }
+    # Only update data if sensor is active
+    if sensor_active:
+        latest_sensor_data = {
+            "temperature_c": temp_c,
+            "temperature_f": temp_f,
+            "humidity": humidity,
+            "timestamp": time.time()
+        }
 
 # Function to check if camera is active
 def is_camera_active():

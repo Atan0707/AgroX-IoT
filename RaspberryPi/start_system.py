@@ -5,15 +5,12 @@ import os
 import threading
 
 def log_output(process, prefix):
-    """Read output from the process but don't print to console.
-    This allows processes to run without cluttering the terminal with logs."""
+    """Read output from the process and print to console with a prefix."""
     for line in iter(process.stdout.readline, ''):
-        pass  # Just consume the output without printing
+        print(f"{prefix} OUT: {line.strip()}")
     
     for line in iter(process.stderr.readline, ''):
-        # Only print critical errors
-        if "CRITICAL" in line or "ERROR" in line:
-            print(f"{prefix} ERROR: {line.strip()}")
+        print(f"{prefix} ERR: {line.strip()}")
 
 def start_api_server():
     """Start the FastAPI server as a subprocess."""
