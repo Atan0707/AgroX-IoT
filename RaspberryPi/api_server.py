@@ -1,26 +1,13 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, PlainTextResponse
-from fastapi.middleware.cors import CORSMiddleware
+from flask import Flask, jsonify, request, send_file
 import os
 import glob
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 import time
-import threading
-import json
-from pydantic import BaseModel
 from datetime import datetime
+import json
 
-# Create a FastAPI instance
-app = FastAPI(title="RaspberryPi Sensor API")
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
+# Create a Flask instance
+app = Flask(__name__)
 
 # Data storage
 IMAGE_DIR = "images"
@@ -39,31 +26,13 @@ camera_active = False
 # Add state change tracking for debugging
 state_change_count = 0
 
-# Model for sensor data response
-class SensorData(BaseModel):
-    temperature_c: float
-    temperature_f: float
-    humidity: float
-    timestamp: float
-
-# Model for status response
-class StatusResponse(BaseModel):
-    sensor_active: bool
-    camera_active: bool
-    message: str
-
-# Model for system control
-class SystemControl(BaseModel):
-    sensor: Optional[bool] = None
-    camera: Optional[bool] = None
-
 # Routes
-@app.get("/")
-async def root():
-    return {"message": "RaspberryPi Sensor API is running"}
+@app.route("/")
+def root():
+    return jsonify({"message": "RaspberryPi Sensor API is running"})
 
-@app.get("/api/control/on", response_model=StatusResponse)
-async def turn_on_system():
+@app.route("/api/control/on")
+def turn_on_system():
     global sensor_active, camera_active, state_change_count
     
     state_change_count += 1
@@ -74,14 +43,14 @@ async def turn_on_system():
     camera_active = True
     
     print(f"New state: Sensor={sensor_active}, Camera={camera_active}")
-    return StatusResponse(
-        sensor_active=sensor_active,
-        camera_active=camera_active,
-        message="All systems turned on"
-    )
+    return jsonify({
+        "sensor_active": sensor_active,
+        "camera_active": camera_active,
+        "message": "All systems turned on"
+    })
 
-@app.get("/api/control/off", response_model=StatusResponse)
-async def turn_off_system():
+@app.route("/api/control/off")
+def turn_off_system():
     global sensor_active, camera_active, state_change_count
     
     state_change_count += 1
@@ -92,114 +61,123 @@ async def turn_off_system():
     camera_active = False
     
     print(f"New state: Sensor={sensor_active}, Camera={camera_active}")
-    return StatusResponse(
-        sensor_active=sensor_active,
-        camera_active=camera_active,
-        message="All systems turned off"
-    )
+    return jsonify({
+        "sensor_active": sensor_active,
+        "camera_active": camera_active,
+        "message": "All systems turned off"
+    })
 
-@app.get("/api/sensor", response_model=SensorData)
-async def get_sensor_data():
+@app.route("/api/sensor")
+def get_sensor_data():
     if latest_sensor_data["timestamp"] is None:
-        raise HTTPException(status_code=503, detail="Sensor data not yet available")
-    return latest_sensor_data
+        return jsonify({"detail": "Sensor data not yet available"}), 503
+    return jsonify(latest_sensor_data)
 
-@app.get("/api/images/latest")
-async def get_latest_image():
+@app.route("/api/images/latest")
+def get_latest_image():
     try:
         # Get the latest image
         images = sorted(glob.glob(f"{IMAGE_DIR}/*.jpg"))
         if not images:
-            raise HTTPException(status_code=404, detail="No images found")
+            return jsonify({"detail": "No images found"}), 404
         latest_image = images[-1]
-        return FileResponse(latest_image)
+        return send_file(latest_image)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return jsonify({"detail": str(e)}), 500
 
-@app.get("/api/images/list")
-async def list_images():
+@app.route("/api/images/list")
+def list_images():
     try:
         images = sorted(glob.glob(f"{IMAGE_DIR}/*.jpg"))
         # Return just the filenames, not full paths
-        return {"images": [os.path.basename(img) for img in images]}
+        return jsonify({"images": [os.path.basename(img) for img in images]})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return jsonify({"detail": str(e)}), 500
 
-@app.get("/api/images/{image_name}")
-async def get_image(image_name: str):
+@app.route("/api/images/<image_name>")
+def get_image(image_name):
     image_path = os.path.join(IMAGE_DIR, image_name)
     if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path)
+        return jsonify({"detail": "Image not found"}), 404
+    return send_file(image_path)
 
 # Log endpoints
-@app.get("/api/logs/list")
-async def list_logs():
+@app.route("/api/logs/list")
+def list_logs():
     try:
         if not os.path.exists(LOG_DIR):
-            return {"logs": []}
+            return jsonify({"logs": []})
         
         logs = sorted(glob.glob(f"{LOG_DIR}/*.csv"))
-        return {"logs": [os.path.basename(log) for log in logs]}
+        return jsonify({"logs": [os.path.basename(log) for log in logs]})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return jsonify({"detail": str(e)}), 500
 
-@app.get("/api/logs/{log_name}")
-async def get_log(log_name: str):
+@app.route("/api/logs/<log_name>")
+def get_log(log_name):
     log_path = os.path.join(LOG_DIR, log_name)
     if not os.path.exists(log_path):
-        raise HTTPException(status_code=404, detail="Log file not found")
-    return FileResponse(log_path, media_type="text/csv")
+        return jsonify({"detail": "Log file not found"}), 404
+    return send_file(log_path, mimetype="text/csv")
 
-@app.get("/api/logs/today")
-async def get_today_log():
+@app.route("/api/logs/today")
+def get_today_log():
     try:
         today = datetime.now().strftime("%Y%m%d")
         log_name = f"sensor_log_{today}.csv"
         log_path = os.path.join(LOG_DIR, log_name)
         
         if not os.path.exists(log_path):
-            raise HTTPException(status_code=404, detail="Today's log file not found")
+            return jsonify({"detail": "Today's log file not found"}), 404
             
-        return FileResponse(log_path, media_type="text/csv")
+        return send_file(log_path, mimetype="text/csv")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return jsonify({"detail": str(e)}), 500
 
 # Control endpoints
-@app.get("/api/control/status", response_model=StatusResponse)
-async def get_status():
-    return StatusResponse(
-        sensor_active=sensor_active,
-        camera_active=camera_active,
-        message="Current system status"
-    )
+@app.route("/api/control/status")
+def get_status():
+    return jsonify({
+        "sensor_active": sensor_active,
+        "camera_active": camera_active,
+        "message": "Current system status"
+    })
 
 # Unified control endpoint
-@app.post("/api/control", response_model=StatusResponse)
-async def control_system(control: SystemControl):
+@app.route("/api/control", methods=["POST"])
+def control_system():
     global sensor_active, camera_active, state_change_count
+    
+    # Parse JSON data from request
+    control = request.get_json()
+    if not control:
+        return jsonify({
+            "sensor_active": sensor_active,
+            "camera_active": camera_active,
+            "message": "No data provided"
+        }), 400
     
     # Track what was changed for the response message
     changes = []
     state_changed = False
     
     # Update sensor status if provided
-    if control.sensor is not None and control.sensor != sensor_active:
+    if "sensor" in control and control["sensor"] != sensor_active:
         state_change_count += 1
         state_changed = True
-        print(f"STATE CHANGE #{state_change_count}: Sensor {sensor_active} -> {control.sensor}")
-        sensor_active = control.sensor
-        status = "started" if control.sensor else "stopped"
+        print(f"STATE CHANGE #{state_change_count}: Sensor {sensor_active} -> {control['sensor']}")
+        sensor_active = control["sensor"]
+        status = "started" if control["sensor"] else "stopped"
         changes.append(f"Sensor data collection {status}")
     
     # Update camera status if provided
-    if control.camera is not None and control.camera != camera_active:
+    if "camera" in control and control["camera"] != camera_active:
         if not state_changed:
             state_change_count += 1
         state_changed = True
-        print(f"STATE CHANGE #{state_change_count}: Camera {camera_active} -> {control.camera}")
-        camera_active = control.camera
-        status = "started" if control.camera else "stopped"
+        print(f"STATE CHANGE #{state_change_count}: Camera {camera_active} -> {control['camera']}")
+        camera_active = control["camera"]
+        status = "started" if control["camera"] else "stopped"
         changes.append(f"Camera capture {status}")
     
     # If nothing was changed, inform the user
@@ -209,11 +187,11 @@ async def control_system(control: SystemControl):
         message = ". ".join(changes)
     
     print(f"Current state: Sensor={sensor_active}, Camera={camera_active}")
-    return StatusResponse(
-        sensor_active=sensor_active,
-        camera_active=camera_active,
-        message=message
-    )
+    return jsonify({
+        "sensor_active": sensor_active,
+        "camera_active": camera_active,
+        "message": message
+    })
 
 # This function will be imported by dht22_with_camera.py
 def update_sensor_data(temp_c: float, temp_f: float, humidity: float):
@@ -231,7 +209,7 @@ def update_sensor_data(temp_c: float, temp_f: float, humidity: float):
 def is_camera_active():
     return camera_active
 
-# To start the server, run: uvicorn api_server:app --host 0.0.0.0 --port 8000
+# Run the Flask server
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    print("Starting Flask API server on http://0.0.0.0:8000")
+    app.run(host="0.0.0.0", port=8000, debug=False) 
