@@ -60,7 +60,7 @@ latest_sensor_data = {
 }
 
 # Server settings
-SERVER_URL = "http://192.168.1.26:3005"  # Change this to your server URL
+SERVER_URL = "https://server.hrzhkm.xyz"  # Change this to your server URL
 
 # Override settings from environment variables if available
 if os.environ.get("SERVER_URL"):
@@ -369,19 +369,20 @@ def manual_upload():
         # Send data to server
         server_result = send_to_server(temperature_c, humidity, image_to_upload)
         
-        if server_result and "data" in server_result and "imageUrl" in server_result["data"]:
+        if server_result and "data" in server_result:
             return jsonify({
                 "success": True,
                 "message": "Data uploaded successfully",
                 "temperature": temperature_c,
                 "humidity": humidity,
-                "imageUrl": server_result["data"]["imageUrl"],
+                "imageUrl": server_result["data"].get("imageUrl"),
+                "shortUrl": server_result["data"].get("shortUrl"),
                 "timestamp": datetime.now().isoformat()
             })
         else:
             return jsonify({
                 "success": False,
-                "error": "Failed to get image URL from server",
+                "error": "Failed to get response from server",
                 "server_response": server_result
             }), 500
             
@@ -437,19 +438,20 @@ def manual_upload_get():
         # Send data to server
         server_result = send_to_server(temperature_c, humidity, image_to_upload)
         
-        if server_result and "data" in server_result and "imageUrl" in server_result["data"]:
+        if server_result and "data" in server_result:
             return jsonify({
                 "success": True,
                 "message": "Data uploaded successfully",
                 "temperature": temperature_c,
                 "humidity": humidity,
-                "imageUrl": server_result["data"]["imageUrl"],
+                "imageUrl": server_result["data"].get("imageUrl"),
+                "shortUrl": server_result["data"].get("shortUrl"),
                 "timestamp": datetime.now().isoformat()
             })
         else:
             return jsonify({
                 "success": False,
-                "error": "Failed to get image URL from server",
+                "error": "Failed to get response from server",
                 "server_response": server_result
             }), 500
             

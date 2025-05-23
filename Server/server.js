@@ -5,9 +5,11 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const pinataSDK = require('@pinata/sdk');
+const shortid = require('shortid');
 
 const app = express();
 const PORT = process.env.PORT || 3005;
+const BASE_URL = process.env.BASE_URL || `https://server.hrzhkm.xyz`;
 
 // Middleware
 app.use(cors());
@@ -17,6 +19,9 @@ const pinata = new pinataSDK({
   pinataJWTKey: process.env.PINATA_JWT,
   pinataGateway: "plum-tough-mongoose-147.mypinata.cloud"
 });
+
+// Store shortened URLs in memory (you might want to use a database in production)
+const urlMapping = new Map();
 
 // Function to upload image to IPFS
 async function uploadImageToIPFS(imagePath, name, description) {
@@ -43,13 +48,30 @@ async function uploadImageToIPFS(imagePath, name, description) {
     const imageUrl = `https://gateway.pinata.cloud/ipfs/${result.IpfsHash}`;
     console.log(`Image uploaded to IPFS: ${imageUrl}`);
     
-    // Return only the image URL
-    return { imageUrl };
+    // Generate short URL with full server URL
+    const shortCode = shortid.generate();
+    urlMapping.set(shortCode, imageUrl);
+    const shortUrl = `${BASE_URL}/s/${shortCode}`;
+    
+    // Return both the original and shortened URL
+    return { imageUrl, shortUrl };
   } catch (error) {
     console.error('Error uploading to IPFS:', error);
     throw error;
   }
 }
+
+// Add redirect endpoint for short URLs
+app.get('/s/:shortCode', (req, res) => {
+  const { shortCode } = req.params;
+  const originalUrl = urlMapping.get(shortCode);
+  
+  if (originalUrl) {
+    res.redirect(originalUrl);
+  } else {
+    res.status(404).json({ error: 'Short URL not found' });
+  }
+});
 
 // API endpoint to process sensor data 
 app.post('/api/upload-image', async (req, res) => {
@@ -65,6 +87,7 @@ app.post('/api/upload-image', async (req, res) => {
     
     // Optional image handling
     let imageUrl = null;
+    let shortUrl = null;
     if (imagePath) {
       // Construct the full path to the image
       const fullImagePath = path.join('/home/hariz/Desktop/AgroX-IoT/RaspberryPi', imagePath);
@@ -76,7 +99,9 @@ app.post('/api/upload-image', async (req, res) => {
           `Sensor data: Temp ${temperature}°C, Humidity ${humidity}%`
         );
         imageUrl = ipfsData.imageUrl;
+        shortUrl = ipfsData.shortUrl;
         console.log(`IPFS image URL: ${imageUrl}`);
+        console.log(`Short URL: ${shortUrl}`);
       } else {
         console.warn(`Image file not found: ${fullImagePath}`);
         return res.status(404).json({
@@ -91,6 +116,7 @@ app.post('/api/upload-image', async (req, res) => {
       temperature,
       humidity,
       imageUrl,
+      shortUrl,
       timestamp: new Date().toISOString()
     };
     
