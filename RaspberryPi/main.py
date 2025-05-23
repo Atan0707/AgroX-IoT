@@ -13,6 +13,7 @@ import json
 from datetime import datetime
 from picamera2 import Picamera2
 from flask import Flask, jsonify, request, send_file
+from flask_cors import CORS  # Import CORS
 
 # Create directories for storing images and logs if they don't exist
 IMAGE_DIR = "images"
@@ -37,7 +38,7 @@ if not os.path.exists(IMAGE_DIR):
 
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
-
+machine_id = "AgroX-37"
 # Initialize CSV log file
 csv_log_file = os.path.join(LOG_DIR, f"sensor_log_{datetime.now().strftime('%Y%m%d')}.csv")
 csv_header = ['timestamp', 'temperature_c', 'temperature_f', 'humidity']
@@ -189,7 +190,7 @@ def cleanup_resources():
     except:
         pass
     try:
-        if 'picam2' in globals():
+        if 'picam2' in globals() and 'camera_available' in locals() and camera_available:
             picam2.close()
     except:
         pass
@@ -208,6 +209,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 # Initialize Flask app
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # API routes
 @app.route("/")
@@ -346,15 +348,21 @@ def manual_upload():
                 "error": "No sensor data available. Please wait for sensor readings."
             }), 400
             
-        # Get the latest image if camera is active
+        # Get the latest image if camera is active and available
         image_to_upload = None
         if camera_active:
-            images = sorted(glob.glob(f"{IMAGE_DIR}/*.jpg"))
-            if images:
-                image_to_upload = images[-1]
-                log_message(f"Using latest image for manual upload: {image_to_upload}")
+            # Check if camera hardware is available
+            camera_available = 'picam2' in globals() and hasattr(picam2, 'capture_file')
+            
+            if camera_available:
+                images = sorted(glob.glob(f"{IMAGE_DIR}/*.jpg"))
+                if images:
+                    image_to_upload = images[-1]
+                    log_message(f"Using latest image for manual upload: {image_to_upload}")
+                else:
+                    log_message("No images available for upload", error=True)
             else:
-                log_message("No images available for upload", error=True)
+                log_message("Camera hardware is unavailable, continuing without image")
         else:
             log_message("Camera is inactive, no image will be uploaded")
             
@@ -408,15 +416,21 @@ def manual_upload_get():
                 "error": "No sensor data available. Please wait for sensor readings."
             }), 400
             
-        # Get the latest image if camera is active
+        # Get the latest image if camera is active and available
         image_to_upload = None
         if camera_active:
-            images = sorted(glob.glob(f"{IMAGE_DIR}/*.jpg"))
-            if images:
-                image_to_upload = images[-1]
-                log_message(f"Using latest image for GET manual upload: {image_to_upload}")
+            # Check if camera hardware is available
+            camera_available = 'picam2' in globals() and hasattr(picam2, 'capture_file')
+            
+            if camera_available:
+                images = sorted(glob.glob(f"{IMAGE_DIR}/*.jpg"))
+                if images:
+                    image_to_upload = images[-1]
+                    log_message(f"Using latest image for GET manual upload: {image_to_upload}")
+                else:
+                    log_message("No images available for upload", error=True)
             else:
-                log_message("No images available for upload", error=True)
+                log_message("Camera hardware is unavailable, continuing without image")
         else:
             log_message("Camera is inactive, no image will be uploaded")
             
@@ -555,11 +569,19 @@ def control_system():
 def sensor_monitoring_loop():
     global sensor, picam2
     
-    # Initialize the camera
-    picam2 = Picamera2()
-    camera_config = picam2.create_still_configuration()
-    picam2.configure(camera_config)
-    picam2.start()
+    # Initialize the camera with error handling
+    camera_available = False
+    try:
+        picam2 = Picamera2()
+        camera_config = picam2.create_still_configuration()
+        picam2.configure(camera_config)
+        picam2.start()
+        camera_available = True
+        log_message("Camera initialized successfully")
+    except Exception as e:
+        log_message(f"Camera initialization failed: {str(e)}", error=True)
+        log_message("System will continue without camera functionality")
+        camera_available = False
 
     # Initialize DHT22 sensor
     sensor = adafruit_dht.DHT22(board.D4)
@@ -580,7 +602,7 @@ def sensor_monitoring_loop():
         try:
             # Get current status
             sensor_status = sensor_active
-            camera_status = camera_active
+            camera_status = camera_active and camera_available
             
             # Track state changes for debugging
             if (previous_sensor_state != sensor_status) or (previous_camera_state != camera_status):
@@ -591,6 +613,8 @@ def sensor_monitoring_loop():
             
             # Log current status periodically
             status_text = f"Status: Sensor {'ACTIVE' if sensor_status else 'INACTIVE'}, Camera {'ACTIVE' if camera_status else 'INACTIVE'}"
+            if camera_active and not camera_available:
+                status_text += " (Camera hardware unavailable)"
             log_message(status_text)
             
             # If both sensor and camera are inactive, just sleep and continue the loop
@@ -633,8 +657,8 @@ def sensor_monitoring_loop():
             else:
                 log_message("Sensor is inactive, skipping sensor reading")
             
-            # Check if camera is active and it's time to capture an image
-            if camera_status and current_time - last_capture_time >= CAPTURE_INTERVAL:
+            # Check if camera is active and available, and it's time to capture an image
+            if camera_status and camera_available and current_time - last_capture_time >= CAPTURE_INTERVAL:
                 try:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     image_path = f"{IMAGE_DIR}/image_{timestamp}.jpg"
@@ -660,6 +684,10 @@ def sensor_monitoring_loop():
                         log_message("Camera was deactivated during capture preparation, skipping")
                 except Exception as error:
                     log_message(f"Camera error: {str(error)}", error=True)
+                    camera_available = False  # Mark camera as unavailable after error
+                    log_message("Camera marked as unavailable due to error")
+            elif camera_status and not camera_available:
+                log_message("Camera is active but hardware is unavailable, skipping image capture")
             
             # Short sleep between readings
             time.sleep(3.0)
